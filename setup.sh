@@ -6,6 +6,22 @@
 # Get host IP
 HOST_IP=$(hostname -I | awk '{print $1}')
 
+# Function to reset network
+reset_network() {
+    echo "Resetting Docker network..."
+    
+    # Stop all containers using the network
+    docker stop $(docker ps -a -q --filter network=comfyui-network) 2>/dev/null || true
+    
+    # Remove the existing network
+    docker network rm comfyui-network 2>/dev/null || true
+    
+    # Create a fresh network
+    docker network create comfyui-network
+    
+    echo "Network reset complete."
+}
+
 # Function to initialize the setup
 init() {
     echo "Initializing ComfyUI Docker setup..."
@@ -31,11 +47,8 @@ EOF
         echo "comfyui.local already exists in /etc/hosts"
     fi
     
-    # Make sure we have a Docker network for Traefik
-    if ! docker network ls | grep -q comfyui-network; then
-        docker network create comfyui-network
-        echo "Created Docker network: comfyui-network"
-    fi
+    # Reset the Docker network
+    reset_network
     
     echo "Initialization complete!"
     echo ""
@@ -53,12 +66,24 @@ start_local() {
     docker compose -f wan-compose.yml down 2>/dev/null || true
     docker compose -f docker-compose-simple.yml down 2>/dev/null || true
     
+    # Make sure network exists
+    if ! docker network ls | grep -q comfyui-network; then
+        echo "Creating Docker network..."
+        docker network create comfyui-network
+    fi
+    
     # Start local mode
     docker compose -f local-compose.yml down 2>/dev/null || true
     docker compose -f local-compose.yml up -d
     
     echo "ComfyUI is now running in local-only mode"
     echo "Access at: http://comfyui.local"
+    echo ""
+    echo "If you can't access comfyui.local, try the following:"
+    echo "1. Check if containers are running: docker ps"
+    echo "2. View logs: docker logs traefik-local"
+    echo "3. Try reset network: ./setup.sh reset-network"
+    echo "4. Try direct mode: ./setup.sh direct"
 }
 
 # Function to start ComfyUI in WAN mode
@@ -69,6 +94,12 @@ start_wan() {
     docker compose -f local-compose.yml down 2>/dev/null || true
     docker compose -f docker-compose-simple.yml down 2>/dev/null || true
     
+    # Make sure network exists
+    if ! docker network ls | grep -q comfyui-network; then
+        echo "Creating Docker network..."
+        docker network create comfyui-network
+    fi
+    
     # Start WAN mode
     docker compose -f wan-compose.yml down 2>/dev/null || true
     docker compose -f wan-compose.yml up -d
@@ -76,6 +107,12 @@ start_wan() {
     echo "ComfyUI is now running in WAN-accessible mode"
     echo "Access locally at: http://comfyui.local"
     echo "Access from other devices on your network at: http://$HOST_IP"
+    echo ""
+    echo "If you can't access comfyui.local, try the following:"
+    echo "1. Check if containers are running: docker ps"
+    echo "2. View logs: docker logs traefik-wan"
+    echo "3. Try reset network: ./setup.sh reset-network"
+    echo "4. Try direct mode: ./setup.sh direct"
 }
 
 # Function to start ComfyUI in direct mode (without Traefik)
@@ -85,6 +122,8 @@ start_direct() {
     # Create direct compose file if it doesn't exist
     if [ ! -f "docker-compose-simple.yml" ]; then
         cat > "docker-compose-simple.yml" << EOF
+version: '3.8'
+
 services:
   comfyui:
     build:
@@ -163,6 +202,11 @@ status() {
     if [ "$local_running" = false ] && [ "$wan_running" = false ] && [ "$direct_running" = false ]; then
         echo "No ComfyUI instances are running."
     fi
+    
+    # Check network status
+    echo ""
+    echo "Network status:"
+    docker network ls | grep comfyui-network || echo "comfyui-network does not exist"
 }
 
 # Function to stop all ComfyUI instances
@@ -207,18 +251,22 @@ case "$1" in
     update)
         update
         ;;
+    reset-network)
+        reset_network
+        ;;
     *)
         echo "ComfyUI Docker Management Script"
         echo "Usage: $0 [command]"
         echo ""
         echo "Commands:"
-        echo "  init      Initialize the ComfyUI Docker setup"
-        echo "  local     Start ComfyUI in local-only mode (accessible only at comfyui.local)"
-        echo "  wan       Start ComfyUI in WAN-accessible mode (accessible from other devices)"
-        echo "  direct    Start ComfyUI in direct port mode (http://localhost:8188)"
-        echo "  status    Check the status of ComfyUI instances"
-        echo "  stop      Stop all ComfyUI instances"
-        echo "  update    Rebuild ComfyUI container to get the latest version"
+        echo "  init          Initialize the ComfyUI Docker setup"
+        echo "  local         Start ComfyUI in local-only mode (accessible only at comfyui.local)"
+        echo "  wan           Start ComfyUI in WAN-accessible mode (accessible from other devices)"
+        echo "  direct        Start ComfyUI in direct port mode (http://localhost:8188)"
+        echo "  status        Check the status of ComfyUI instances"
+        echo "  stop          Stop all ComfyUI instances"
+        echo "  update        Rebuild ComfyUI container to get the latest version"
+        echo "  reset-network Reset Docker network (use if having connection issues)"
         exit 1
         ;;
 esac

@@ -1,6 +1,6 @@
 networks:
   comfyui-network:
-    name: comfyui-network
+    external: true
 
 services:
   traefik:
