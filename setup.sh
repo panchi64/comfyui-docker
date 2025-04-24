@@ -85,8 +85,6 @@ start_direct() {
     # Create direct compose file if it doesn't exist
     if [ ! -f "docker-compose-simple.yml" ]; then
         cat > "docker-compose-simple.yml" << EOF
-version: '3.8'
-
 services:
   comfyui:
     build:
