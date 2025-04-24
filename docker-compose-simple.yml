@@ -1,0 +1,23 @@
+services:
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile-simple
+    container_name: comfyui
+    restart: always
+    ports:
+      - '8188:8188'
+    volumes:
+      - ./models:/app/ComfyUI/models
+      - ./output:/app/ComfyUI/output
+      - ./custom_nodes:/app/ComfyUI/custom_nodes
+      - ./workflows:/app/ComfyUI/workflows
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -1,0 +1,59 @@
+networks:
+  comfyui-network:
+    name: comfyui-network
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik-wan
+    restart: always
+    ports:
+      - '80:80' # Expose to all interfaces
+      - '8080:8080' # Traefik dashboard
+    networks:
+      - comfyui-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/config:/etc/traefik
+    command:
+      - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--entrypoints.web.address=:80'
+      - '--providers.file.directory=/etc/traefik'
+      - '--providers.file.watch=true'
+      - '--log.level=DEBUG'
+
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comfyui-wan
+    restart: always
+    networks:
+      - comfyui-network
+    volumes:
+      - ./models:/app/ComfyUI/models
+      - ./output:/app/ComfyUI/output
+      - ./custom_nodes:/app/ComfyUI/custom_nodes
+      - ./workflows:/app/ComfyUI/workflows
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=comfyui-network'
+      - 'traefik.http.routers.comfyui.rule=Host(`comfyui.local`)'
+      - 'traefik.http.routers.comfyui.entrypoints=web'
+      - 'traefik.http.services.comfyui.loadbalancer.server.port=8188'
+      # Second rule to allow access via IP address
+      - 'traefik.http.routers.comfyui-ip.rule=HostRegexp(`{any:.*}`)'
+      - 'traefik.http.routers.comfyui-ip.entrypoints=web'
+      - 'traefik.http.routers.comfyui-ip.priority=1' # Lower priority than the named host
+      - 'traefik.http.routers.comfyui-ip.service=comfyui'
